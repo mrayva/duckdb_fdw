@@ -26,7 +26,24 @@
 #include "miscadmin.h"
 #include "executor/executor.h"
 #include "commands/explain.h"
+#if PG_VERSION_NUM >= 180000
+#include "commands/explain_state.h"
+#include "commands/explain_format.h"
+#endif
 #include "nodes/nodeFuncs.h"
+
+/*
+ * PG18 added a disabled_nodes int parameter to create_foreignscan_path(),
+ * inserted right after `rows`. This expands to "0," (a real, harmless
+ * argument -- 0 disabled nodes on this path) on PG18+, and to nothing on
+ * older versions, so every create_foreignscan_path() call site below stays
+ * a single line of source across PG13-18 instead of needing its own #if.
+ */
+#if PG_VERSION_NUM >= 180000
+#define DUCKDB_FDW_DISABLED_NODES_ARG 0,
+#else
+#define DUCKDB_FDW_DISABLED_NODES_ARG
+#endif
 
 PG_MODULE_MAGIC;
 
@@ -472,6 +489,7 @@ duckdbGetForeignJoinPaths(PlannerInfo *root, RelOptInfo *joinrel,
                  create_foreignscan_path(root, joinrel,
                                           joinrel->reltarget,
                                           rows,
+                                          DUCKDB_FDW_DISABLED_NODES_ARG
                                           startup_cost,
                                           total_cost,
                                           NIL,
@@ -568,6 +586,7 @@ duckdbGetForeignPaths(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid
              create_foreignscan_path(root, baserel,
                                      baserel->reltarget,
                                      rows,
+                                     DUCKDB_FDW_DISABLED_NODES_ARG
                                      startup_cost,
                                      total_cost,
                                      NIL,   /* no pathkeys */
@@ -898,6 +917,7 @@ duckdbGetForeignUpperPaths(PlannerInfo *root, UpperRelationKind stage,
                  create_foreignscan_path(root, output_rel,
                                           output_rel->reltarget,
                                           rows,
+                                          DUCKDB_FDW_DISABLED_NODES_ARG
                                           startup_cost,
                                           total_cost,
                                           NIL,
